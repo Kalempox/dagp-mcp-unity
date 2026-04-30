@@ -1,0 +1,29 @@
+{
+  "name": "dagp-mcp-unity-server",
+  "version": "0.1.0",
+  "description": "Node MCP server that bridges Claude (or any MCP host) to a Unity Editor running com.dagp.unity-mcp.",
+  "type": "module",
+  "main": "build/index.js",
+  "bin": {
+    "dagp-mcp-unity": "build/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "start": "node build/index.js",
+    "clean": "rimraf build"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

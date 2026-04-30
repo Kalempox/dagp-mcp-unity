@@ -1,0 +1,19 @@
+{
+    "name": "DAGPMCP.Editor",
+    "rootNamespace": "DAGP.MCP",
+    "references": [
+        "Unity.Nuget.Newtonsoft-Json",
+        "Unity.EditorCoroutines.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

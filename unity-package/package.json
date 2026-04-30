@@ -1,0 +1,18 @@
+{
+  "name": "com.dagp.unity-mcp",
+  "displayName": "DAGP Unity MCP",
+  "version": "0.1.0",
+  "unity": "2022.3",
+  "description": "DAGP Model Context Protocol bridge for Unity Editor. Enables AI agents to drive scene editing, play mode, screenshot capture, input simulation, and runtime probing via MCP.",
+  "author": {
+    "name": "DAGP"
+  },
+  "license": "MIT",
+  "type": "tool",
+  "keywords": ["mcp", "ai", "claude", "automation", "editor", "dagp"],
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.unity.editorcoroutines": "1.0.0",
+    "com.unity.test-framework": "1.3.3"
+  }
+}
