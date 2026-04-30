@@ -8,6 +8,14 @@ import {
 import { UnityClient } from "./bridge/unityClient.js";
 import { ping, pingInputSchema } from "./tools/ping.js";
 import { sceneTools } from "./tools/scene/index.js";
+import { gameObjectTools } from "./tools/gameobject/index.js";
+import { transformTools } from "./tools/transform/index.js";
+import { materialTools } from "./tools/material/index.js";
+import { componentTools } from "./tools/component/index.js";
+import { projectTools } from "./tools/project/index.js";
+import { editorTools } from "./tools/editor/index.js";
+import { consoleTools } from "./tools/console/index.js";
+import { batchTools } from "./tools/batch/index.js";
 
 const UNITY_PORT = Number(process.env.DAGP_UNITY_PORT ?? 8090);
 const UNITY_HOST = process.env.DAGP_UNITY_HOST ?? "127.0.0.1";
@@ -32,6 +40,14 @@ const tools = [
     },
   },
   ...sceneTools(unity),
+  ...gameObjectTools(unity),
+  ...transformTools(unity),
+  ...materialTools(unity),
+  ...componentTools(unity),
+  ...projectTools(unity),
+  ...editorTools(unity),
+  ...consoleTools(unity),
+  ...batchTools(unity),
 ];
 
 // ---- MCP wiring ----

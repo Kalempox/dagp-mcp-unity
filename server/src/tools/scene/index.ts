@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { UnityClient } from "../../bridge/unityClient.js";
+import { zodToJsonSchema } from "../../utils/zodToJsonSchema.js";
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -88,36 +89,3 @@ export const sceneTools = (unity: UnityClient) => [
   },
 ];
 
-// Minimal Zod -> JSON Schema converter for our flat object schemas.
-function zodToJsonSchema(schema: z.ZodObject<any>): Record<string, unknown> {
-  const shape = (schema as any)._def.shape();
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
-  for (const [key, value] of Object.entries(shape)) {
-    const def = (value as any)._def;
-    let type: string = "string";
-    if (def.typeName === "ZodNumber") type = "number";
-    else if (def.typeName === "ZodBoolean") type = "boolean";
-    else if (def.typeName === "ZodEnum") type = "string";
-    else if (def.typeName === "ZodOptional" || def.typeName === "ZodDefault") {
-      const inner = def.innerType._def.typeName;
-      if (inner === "ZodNumber") type = "number";
-      else if (inner === "ZodBoolean") type = "boolean";
-      else type = "string";
-    } else if (def.typeName === "ZodString") type = "string";
-
-    const prop: Record<string, unknown> = { type };
-    if (def.description) prop.description = def.description;
-    if (def.typeName === "ZodEnum") prop.enum = def.values;
-    properties[key] = prop;
-
-    const isOptional = def.typeName === "ZodOptional" || def.typeName === "ZodDefault";
-    if (!isOptional) required.push(key);
-  }
-  return {
-    type: "object",
-    properties,
-    ...(required.length ? { required } : {}),
-    additionalProperties: false,
-  };
-}

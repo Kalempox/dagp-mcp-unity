@@ -3,7 +3,9 @@
     "rootNamespace": "DAGP.MCP",
     "references": [
         "Unity.Nuget.Newtonsoft-Json",
-        "Unity.EditorCoroutines.Editor"
+        "Unity.EditorCoroutines.Editor",
+        "UnityEditor.TestRunner",
+        "UnityEngine.TestRunner"
     ],
     "includePlatforms": [
         "Editor"
