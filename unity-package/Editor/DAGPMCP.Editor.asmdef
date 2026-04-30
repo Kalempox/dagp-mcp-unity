@@ -5,7 +5,8 @@
         "Unity.Nuget.Newtonsoft-Json",
         "Unity.EditorCoroutines.Editor",
         "UnityEditor.TestRunner",
-        "UnityEngine.TestRunner"
+        "UnityEngine.TestRunner",
+        "UnityEngine.UI"
     ],
     "includePlatforms": [
         "Editor"

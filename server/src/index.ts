@@ -16,6 +16,11 @@ import { projectTools } from "./tools/project/index.js";
 import { editorTools } from "./tools/editor/index.js";
 import { consoleTools } from "./tools/console/index.js";
 import { batchTools } from "./tools/batch/index.js";
+import { captureTools } from "./tools/capture/index.js";
+import { playTools } from "./tools/play/index.js";
+import { renderTools } from "./tools/render/index.js";
+import { inputTools } from "./tools/input/index.js";
+import { runtimeTools } from "./tools/runtime/index.js";
 
 const UNITY_PORT = Number(process.env.DAGP_UNITY_PORT ?? 8090);
 const UNITY_HOST = process.env.DAGP_UNITY_HOST ?? "127.0.0.1";
@@ -48,6 +53,11 @@ const tools = [
   ...editorTools(unity),
   ...consoleTools(unity),
   ...batchTools(unity),
+  ...captureTools(unity),
+  ...playTools(unity),
+  ...renderTools(unity),
+  ...inputTools(unity),
+  ...runtimeTools(unity),
 ];
 
 // ---- MCP wiring ----

@@ -40,8 +40,26 @@ export class UnityClient {
   async ensureConnected(): Promise<void> {
     if (this.socket && !this.socket.destroyed) return;
     if (this.connecting) return this.connecting;
-    this.connecting = this.connect();
+    this.connecting = this.connectWithRetry();
     try { await this.connecting; } finally { this.connecting = undefined; }
+  }
+
+  /**
+   * Retries connect with exponential backoff (250ms, 500ms, 1s, 2s, 4s, 4s, 4s = 7 attempts, ~16s budget).
+   * This absorbs Unity bridge restarts during recompile / domain reload — the most common cause of ECONNREFUSED.
+   */
+  private async connectWithRetry(maxAttempts = 7): Promise<void> {
+    const delays = [250, 500, 1000, 2000, 4000, 4000, 4000];
+    let lastErr: Error | undefined;
+    for (let i = 0; i < maxAttempts; i++) {
+      try { await this.connect(); return; }
+      catch (err) {
+        lastErr = err as Error;
+        const delay = delays[Math.min(i, delays.length - 1)];
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+    throw new Error(`Unity bridge unreachable after ${maxAttempts} attempts: ${lastErr?.message}`);
   }
 
   private connect(): Promise<void> {

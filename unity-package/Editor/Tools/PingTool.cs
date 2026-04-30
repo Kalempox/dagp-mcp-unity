@@ -12,6 +12,7 @@ namespace DAGP.MCP.Tools
         public string Name => "ping";
         public bool RequiresMainThread => true;
 
+
         public Task<JToken> Execute(JObject parameters)
         {
             var result = new JObject

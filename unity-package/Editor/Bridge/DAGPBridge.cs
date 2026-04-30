@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -138,8 +139,20 @@ namespace DAGP.MCP.Bridge
             if (req == null || string.IsNullOrEmpty(req.Method))
                 return DAGPResponse.Fail(req?.Id, DAGPErrorCodes.InvalidRequest, "missing method");
 
+            // Built-in introspection: list every registered tool. Useful when MCP-side and Unity-side disagree.
+            if (req.Method == "system.list_tools")
+            {
+                var arr = new JArray();
+                foreach (var n in ToolRegistry.Names) arr.Add(n);
+                return DAGPResponse.Ok(req.Id, new JObject { ["count"] = arr.Count, ["tools"] = arr });
+            }
+
             if (!ToolRegistry.TryGet(req.Method, out var tool))
-                return DAGPResponse.Fail(req.Id, DAGPErrorCodes.MethodNotFound, $"unknown tool: {req.Method}");
+            {
+                var available = string.Join(", ", ToolRegistry.Names);
+                return DAGPResponse.Fail(req.Id, DAGPErrorCodes.MethodNotFound,
+                    $"unknown tool: {req.Method}. Available ({ToolRegistry.Names.Count()}): {available}");
+            }
 
             try
             {
