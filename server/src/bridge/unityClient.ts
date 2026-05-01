@@ -45,11 +45,12 @@ export class UnityClient {
   }
 
   /**
-   * Retries connect with exponential backoff (250ms, 500ms, 1s, 2s, 4s, 4s, 4s = 7 attempts, ~16s budget).
-   * This absorbs Unity bridge restarts during recompile / domain reload — the most common cause of ECONNREFUSED.
+   * Retries connect with exponential-ish backoff. 12 attempts, ~45s budget.
+   * Absorbs Unity bridge restarts during recompile / domain reload — the most common
+   * cause of ECONNREFUSED. Larger budget than naive (Unity 6 + URP recompile can take 20s+).
    */
-  private async connectWithRetry(maxAttempts = 7): Promise<void> {
-    const delays = [250, 500, 1000, 2000, 4000, 4000, 4000];
+  private async connectWithRetry(maxAttempts = 12): Promise<void> {
+    const delays = [250, 500, 1000, 2000, 3000, 4000, 4000, 5000, 5000, 5000, 5000, 5000];
     let lastErr: Error | undefined;
     for (let i = 0; i < maxAttempts; i++) {
       try { await this.connect(); return; }
@@ -119,8 +120,32 @@ export class UnityClient {
     this.pending.clear();
   }
 
-  /** Send a JSON-RPC tool call to Unity and await the response. */
+  /**
+   * Send a JSON-RPC tool call to Unity and await the response.
+   * Auto-retries up to 3 times on mid-flight connection drops (Unity recompile / domain reload).
+   */
   async call<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+    let lastErr: Error | undefined;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try { return await this.callOnce<T>(method, params); }
+      catch (err) {
+        lastErr = err as Error;
+        const msg = lastErr.message ?? "";
+        const isTransient =
+          msg.includes("Unity bridge closed") ||
+          msg.includes("Unity bridge not connected") ||
+          msg.includes("ECONNREFUSED") ||
+          msg.includes("ECONNRESET") ||
+          msg.includes("EPIPE");
+        if (!isTransient) throw lastErr;
+        // Wait briefly for Unity to come back, then retry.
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+    }
+    throw new Error(`Unity call '${method}' failed after 3 attempts: ${lastErr?.message}`);
+  }
+
+  private async callOnce<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
     await this.ensureConnected();
     if (!this.socket || this.socket.destroyed) throw new Error("Unity bridge not connected");
 
