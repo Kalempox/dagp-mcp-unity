@@ -53,7 +53,7 @@ namespace DAGP.MCP.Tools.InputOps
 
             return Task.FromResult<JToken>(new JObject
             {
-                ["clicked"] = clicked != null,
+                ["clicked"] = clicked,
                 ["target"] = target.name,
                 ["instanceId"] = target.GetInstanceID(),
                 ["raycastHits"] = raycastResults.Count

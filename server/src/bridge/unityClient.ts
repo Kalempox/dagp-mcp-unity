@@ -18,56 +18,63 @@ interface JsonRpcResponse {
 type Pending = {
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
-  timer: NodeJS.Timeout;
 };
 
 /**
  * Persistent TCP connection to Unity Editor's DAGPBridge.
  * Protocol: newline-delimited JSON-RPC 2.0.
+ *
+ * Resilience policy: NEVER give up. No request timeouts, infinite reconnect.
+ * The MCP host should always see a healthy server even if Unity is mid-recompile
+ * for minutes. Calls block until Unity comes back and answers.
  */
 export class UnityClient {
   private socket?: net.Socket;
   private pending = new Map<string, Pending>();
   private connecting?: Promise<void>;
   private buffer = "";
+  private closed = false;
 
   constructor(
     private readonly host: string,
-    private readonly port: number,
-    private readonly requestTimeoutMs = 30_000
+    private readonly port: number
   ) {}
 
   async ensureConnected(): Promise<void> {
     if (this.socket && !this.socket.destroyed) return;
     if (this.connecting) return this.connecting;
-    this.connecting = this.connectWithRetry();
+    this.connecting = this.connectForever();
     try { await this.connecting; } finally { this.connecting = undefined; }
   }
 
   /**
-   * Retries connect with exponential-ish backoff. 12 attempts, ~45s budget.
-   * Absorbs Unity bridge restarts during recompile / domain reload — the most common
-   * cause of ECONNREFUSED. Larger budget than naive (Unity 6 + URP recompile can take 20s+).
+   * Reconnect indefinitely with capped backoff. Unity recompile / domain reload
+   * can take 20s+ on big projects; sometimes the editor is paused or being
+   * restarted. We just keep trying — never surface ECONNREFUSED to the caller.
    */
-  private async connectWithRetry(maxAttempts = 12): Promise<void> {
-    const delays = [250, 500, 1000, 2000, 3000, 4000, 4000, 5000, 5000, 5000, 5000, 5000];
-    let lastErr: Error | undefined;
-    for (let i = 0; i < maxAttempts; i++) {
+  private async connectForever(): Promise<void> {
+    let attempt = 0;
+    while (!this.closed) {
       try { await this.connect(); return; }
       catch (err) {
-        lastErr = err as Error;
-        const delay = delays[Math.min(i, delays.length - 1)];
+        attempt++;
+        const delay = Math.min(5000, 250 * Math.pow(1.5, Math.min(attempt, 12)));
+        if (attempt === 1 || attempt % 10 === 0) {
+          process.stderr.write(`[dagp-mcp-unity] Unity bridge not reachable (attempt ${attempt}): ${(err as Error).message}\n`);
+        }
         await new Promise((r) => setTimeout(r, delay));
       }
     }
-    throw new Error(`Unity bridge unreachable after ${maxAttempts} attempts: ${lastErr?.message}`);
+    throw new Error("client closing");
   }
 
   private connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       const sock = net.createConnection({ host: this.host, port: this.port });
+      // Attach permanent error handler immediately so a stray 'error' after
+      // initial settle never escalates to uncaughtException.
+      sock.on("error", () => { /* surfaced via close */ });
       const onConnect = () => {
-        sock.off("error", onErr);
         sock.setEncoding("utf8");
         this.socket = sock;
         this.attachHandlers(sock);
@@ -89,7 +96,6 @@ export class UnityClient {
       this.buffer = "";
       this.failAllPending(new Error("Unity bridge closed"));
     });
-    sock.on("error", () => { /* surfaced via close */ });
   }
 
   private onData(chunk: string) {
@@ -109,40 +115,38 @@ export class UnityClient {
     catch { return; }
     const pending = this.pending.get(msg.id);
     if (!pending) return;
-    clearTimeout(pending.timer);
     this.pending.delete(msg.id);
     if (msg.error) pending.reject(new Error(`Unity error ${msg.error.code}: ${msg.error.message}`));
     else pending.resolve(msg.result);
   }
 
   private failAllPending(err: Error) {
-    for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(err); }
+    for (const [, p] of this.pending) { p.reject(err); }
     this.pending.clear();
   }
 
   /**
    * Send a JSON-RPC tool call to Unity and await the response.
-   * Auto-retries up to 3 times on mid-flight connection drops (Unity recompile / domain reload).
+   * No request timeout: blocks until Unity answers or the client is closed.
+   * On mid-flight drops (Unity recompile / domain reload) retries indefinitely.
    */
   async call<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
-    let lastErr: Error | undefined;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    while (!this.closed) {
       try { return await this.callOnce<T>(method, params); }
       catch (err) {
-        lastErr = err as Error;
-        const msg = lastErr.message ?? "";
+        const msg = (err as Error).message ?? "";
         const isTransient =
           msg.includes("Unity bridge closed") ||
           msg.includes("Unity bridge not connected") ||
           msg.includes("ECONNREFUSED") ||
           msg.includes("ECONNRESET") ||
           msg.includes("EPIPE");
-        if (!isTransient) throw lastErr;
-        // Wait briefly for Unity to come back, then retry.
-        await new Promise((r) => setTimeout(r, 1500));
+        if (!isTransient) throw err;
+        process.stderr.write(`[dagp-mcp-unity] '${method}' interrupted (${msg}); retrying after Unity reconnects.\n`);
+        await new Promise((r) => setTimeout(r, 750));
       }
     }
-    throw new Error(`Unity call '${method}' failed after 3 attempts: ${lastErr?.message}`);
+    throw new Error("client closing");
   }
 
   private async callOnce<T = unknown>(method: string, params: Record<string, unknown> = {}): Promise<T> {
@@ -153,18 +157,15 @@ export class UnityClient {
     const req: JsonRpcRequest = { jsonrpc: "2.0", id, method, params };
 
     return new Promise<T>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`Unity call '${method}' timed out after ${this.requestTimeoutMs}ms`));
-      }, this.requestTimeoutMs);
-      this.pending.set(id, { resolve: (v) => resolve(v as T), reject, timer });
+      this.pending.set(id, { resolve: (v) => resolve(v as T), reject });
       this.socket!.write(JSON.stringify(req) + "\n", (err) => {
-        if (err) { clearTimeout(timer); this.pending.delete(id); reject(err); }
+        if (err) { this.pending.delete(id); reject(err); }
       });
     });
   }
 
   close() {
+    this.closed = true;
     this.failAllPending(new Error("client closing"));
     try { this.socket?.destroy(); } catch { /* noop */ }
   }

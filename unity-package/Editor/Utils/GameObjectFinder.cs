@@ -27,7 +27,9 @@ namespace DAGP.MCP.Utils
         /// <summary>Resolve by InstanceID (preferred when ambiguous names exist).</summary>
         public static GameObject FindByInstanceId(int instanceId)
         {
+#pragma warning disable CS0618 // EntityIdToObject is Unity 6+; this package targets 2022.3
             var obj = UnityEditor.EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+#pragma warning restore CS0618
             return obj;
         }
 

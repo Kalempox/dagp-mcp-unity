@@ -18,7 +18,6 @@ namespace DAGP.MCP.Tools.RenderOps
         public Task<JToken> Execute(JObject parameters)
         {
             var cameraName = (string)parameters["camera"];
-            var includeUI = parameters.Value<bool?>("includeUI") ?? false;
 
             var cam = ResolveCamera(cameraName);
             if (cam == null) throw new System.InvalidOperationException("no Camera found");
@@ -30,8 +29,6 @@ namespace DAGP.MCP.Tools.RenderOps
 
             foreach (var r in allRenderers)
             {
-                if (!includeUI && r is CanvasRenderer) continue;
-
                 var inFrustum = GeometryUtility.TestPlanesAABB(planes, r.bounds);
                 var layerVisible = (cam.cullingMask & (1 << r.gameObject.layer)) != 0;
                 var enabled = r.enabled && r.gameObject.activeInHierarchy;

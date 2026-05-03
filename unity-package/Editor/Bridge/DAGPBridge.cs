@@ -34,7 +34,10 @@ namespace DAGP.MCP.Bridge
         static DAGPBridge()
         {
             EditorApplication.quitting += Stop;
-            AssemblyReloadEvents.beforeAssemblyReload += Stop;
+            // Domain reload tears down all static state; Stop() releases the listener
+            // cleanly before reload, then InitializeOnLoad re-runs and AutoStart restarts us.
+            AssemblyReloadEvents.beforeAssemblyReload += StopForReload;
+            AssemblyReloadEvents.afterAssemblyReload += AfterReload;
             if (DAGPSettings.AutoStart) EditorApplication.delayCall += Start;
         }
 
@@ -56,7 +59,23 @@ namespace DAGP.MCP.Bridge
                 _lastError = ex.Message;
                 _running = false;
                 Debug.LogError($"[DAGP-MCP] Bridge start failed: {ex.Message}");
+                // Don't give up — try again shortly. Common cause: port still in TIME_WAIT
+                // from a previous editor instance, or AutoStart racing with other init.
+                EditorApplication.delayCall += () => { if (!_running && DAGPSettings.AutoStart) Start(); };
             }
+        }
+
+        static void StopForReload()
+        {
+            Debug.Log("[DAGP-MCP] Bridge stopping (assembly reload — will auto-restart).");
+            Stop();
+        }
+
+        static void AfterReload()
+        {
+            // Belt-and-suspenders: InitializeOnLoad already runs Start via delayCall,
+            // but if AutoStart was toggled off then on, this still picks it up.
+            if (!_running && DAGPSettings.AutoStart) EditorApplication.delayCall += Start;
         }
 
         public static void Stop()
@@ -78,7 +97,16 @@ namespace DAGP.MCP.Bridge
             {
                 TcpClient client;
                 try { client = await _listener.AcceptTcpClientAsync(); }
-                catch { break; }
+                catch (ObjectDisposedException) { break; }
+                catch (OperationCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    // Transient accept failure — log and keep listening.
+                    if (ct.IsCancellationRequested) break;
+                    Debug.LogWarning($"[DAGP-MCP] Accept failed (continuing): {ex.Message}");
+                    try { await Task.Delay(250, ct); } catch { break; }
+                    continue;
+                }
 
                 _client = client;
                 Debug.Log($"[DAGP-MCP] Client connected from {client.Client.RemoteEndPoint}.");

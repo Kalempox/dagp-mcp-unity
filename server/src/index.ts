@@ -95,8 +95,18 @@ async function main() {
 }
 
 main().catch((err) => {
-  process.stderr.write(`[dagp-mcp-unity] fatal: ${err}\n`);
+  process.stderr.write(`[dagp-mcp-unity] fatal during startup: ${err}\n`);
   process.exit(1);
+});
+
+// Survive any stray async error so the MCP host never sees the server "disconnect".
+// Anything Unity-related is already retried inside UnityClient; if something else
+// throws, we log and keep serving.
+process.on("uncaughtException", (err) => {
+  process.stderr.write(`[dagp-mcp-unity] uncaughtException (continuing): ${err?.stack ?? err}\n`);
+});
+process.on("unhandledRejection", (reason) => {
+  process.stderr.write(`[dagp-mcp-unity] unhandledRejection (continuing): ${reason instanceof Error ? reason.stack : String(reason)}\n`);
 });
 
 // Graceful shutdown
