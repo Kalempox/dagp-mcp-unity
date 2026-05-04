@@ -9,9 +9,15 @@ export const isPlayingSchema = z.object({});
 export const playTools = (unity: UnityClient) => [
   {
     name: "play.enter",
-    description: "Requests Unity to enter Play Mode. Returns immediately — caller should poll play.is_playing. Note: by default Unity reloads the domain on Play, which briefly disconnects the bridge (~1-3s). Disable Domain Reload in Editor settings for instant transitions.",
+    description: "Requests Unity to enter Play Mode. If domain reload is enabled (default), waits for the bridge to recover before returning. Poll play.is_playing afterward to confirm isPlaying=true.",
     inputSchema: zodToJsonSchema(enterSchema),
-    handler: async (args: unknown) => unity.call("play.enter", enterSchema.parse(args ?? {}) as Record<string, unknown>),
+    handler: async (args: unknown) => {
+      const result = await unity.call("play.enter", enterSchema.parse(args ?? {}) as Record<string, unknown>) as Record<string, unknown>;
+      if (!result.alreadyPlaying && !result.domainReloadDisabled) {
+        await unity.awaitReconnect();
+      }
+      return result;
+    },
   },
   {
     name: "play.exit",

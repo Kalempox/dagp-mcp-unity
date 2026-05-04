@@ -126,6 +126,35 @@ export class UnityClient {
   }
 
   /**
+   * Wait for Unity to go through a domain reload cycle and come back online.
+   * Phase 1: wait up to disconnectTimeoutMs for the socket to drop (reload started).
+   * Phase 2: wait up to reconnectTimeoutMs for the socket to come back (reload done).
+   *
+   * Call this immediately after project.recompile or play.enter (when domain reload
+   * is expected) so the next tool call is guaranteed to find a live bridge.
+   */
+  async awaitReconnect(disconnectTimeoutMs = 3000, reconnectTimeoutMs = 30_000): Promise<void> {
+    // Phase 1: wait for the socket to drop (domain reload beginning)
+    const t1 = Date.now() + disconnectTimeoutMs;
+    while (Date.now() < t1) {
+      if (!this.socket || this.socket.destroyed) break;
+      await new Promise(r => setTimeout(r, 150));
+    }
+
+    // Phase 2: wait for socket to come back (domain reload finished)
+    const t2 = Date.now() + reconnectTimeoutMs;
+    while (Date.now() < t2 && !this.closed) {
+      if (this.socket && !this.socket.destroyed) return;
+      // Kick off reconnection if not already in progress
+      if (!this.connecting) this.ensureConnected().catch(() => { /* retried internally */ });
+      await new Promise(r => setTimeout(r, 300));
+    }
+
+    if (this.socket && !this.socket.destroyed) return;
+    throw new Error("Unity bridge did not recover after domain reload");
+  }
+
+  /**
    * Send a JSON-RPC tool call to Unity and await the response.
    * No request timeout: blocks until Unity answers or the client is closed.
    * On mid-flight drops (Unity recompile / domain reload) retries indefinitely.

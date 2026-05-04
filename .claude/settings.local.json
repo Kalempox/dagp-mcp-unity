@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npx tsc *)",
       "Bash(npm run *)",
-      "PowerShell(npm *)"
+      "PowerShell(npm *)",
+      "PowerShell(Get-Content *)",
+      "PowerShell(Get-ChildItem \"C:\\\\Users\\\\Abdulkadir Kalender\\\\.claude\\\\\" -Force -File -ErrorAction SilentlyContinue | Where-Object { $_.Name -match \"settings|hooks\" } | Select-Object FullName)"
     ]
   }
 }

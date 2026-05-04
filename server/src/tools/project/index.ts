@@ -24,9 +24,13 @@ export const projectTools = (unity: UnityClient) => [
   },
   {
     name: "project.recompile",
-    description: "Forces a script recompile + asset refresh. Use after editing C# files outside Unity.",
+    description: "Forces a script recompile + asset refresh. Waits for the domain reload to complete before returning — safe to call the next tool immediately after.",
     inputSchema: zodToJsonSchema(recompileSchema),
-    handler: async (args: unknown) => unity.call("project.recompile", recompileSchema.parse(args ?? {}) as Record<string, unknown>),
+    handler: async (args: unknown) => {
+      const result = await unity.call("project.recompile", recompileSchema.parse(args ?? {}) as Record<string, unknown>);
+      await unity.awaitReconnect();
+      return result;
+    },
   },
   {
     name: "project.create_prefab",
